@@ -1,38 +1,49 @@
-# SD-01 — Processos Distribuídos com Python
+# SD-02 — Threads Distribuídas com Python
 
-Exemplo de sistema distribuído utilizando **processos paralelos** com `multiprocessing` do Python, comunicando-se entre duas máquinas virtuais Linux via **sockets TCP**.
+Exemplo de sistema distribuído utilizando **threads** com `threading` do Python, comunicando-se entre duas máquinas virtuais Linux via **sockets TCP**.
 
 ---
 
-## Descrição
+## Descritivo do Programa
 
-Este exemplo demonstra o uso de **processos** como unidade de paralelismo em sistemas distribuídos.
+**O que é?**
+Um sistema distribuído onde o client envia ao server o modo de sincronização desejado e o server executa 4 threads em paralelo usando esse modo, retornando os resultados ao client.
 
-O **client** envia parâmetros de processamento ao **server** via socket. O server cria dois processos independentes (`Process`) que executam contagens em paralelo, armazenam os resultados em memória compartilhada (`multiprocessing.Value`) e, ao final, somam os valores e devolvem o resultado ao client.
+**Como funciona?**
+O server aguarda conexão na porta 5001. Ao receber os parâmetros do client (modo e configurações), cria 4 threads que executam uma contagem em paralelo. Dependendo do modo escolhido, as threads acessam a seção crítica de formas diferentes — sem controle, com Lock, com Semáforo(1) ou com Semáforo(2). Os resultados são coletados e enviados de volta ao client.
 
-Cada processo exibe seu **PID** no terminal, evidenciando que são processos distintos rodando em paralelo no sistema operacional.
+**Por que isso é distribuído?**
+O processamento e a sincronização das threads acontecem no server (VM 1), enquanto o client (VM 2) controla remotamente qual modo de sincronização será usado e recebe os resultados, caracterizando a divisão de responsabilidades entre máquinas distintas em uma rede.
 
-### Conceitos abordados
+**Os 4 modos demonstrados**
+- `simples` — threads sem sincronização, saída intercalada e imprevisível
+- `lock` — `threading.Lock()` garante que apenas 1 thread por vez acessa a seção crítica
+- `semaforo1` — `threading.Semaphore(1)` equivalente ao Lock, 1 thread por vez
+- `semaforo2` — `threading.Semaphore(2)` permite 2 threads simultâneas na seção crítica
 
-- `multiprocessing.Process` — criação de processos filhos
-- `multiprocessing.Value` — memória compartilhada entre processos
-- `p.start()` / `p.join()` — ciclo de vida de processos
-- Comunicação entre máquinas via **socket TCP**
-- Ambientes isolados com **Vagrant + VirtualBox**
+**Tecnologias utilizadas**
+- `threading.Thread` — criação de threads paralelas
+- `threading.Lock` — exclusão mútua entre threads
+- `threading.Semaphore` — controle de acesso com limite configurável
+- `socket TCP` — comunicação entre as duas máquinas virtuais
+- `Vagrant + VirtualBox` — provisionamento das VMs Linux
 
 ---
 
 ## Arquitetura
 
 ```
-┌─────────────────────┐        socket TCP         ┌─────────────────────────┐
-│   CLIENT VM         │ ────────────────────────> │   SERVER VM             │
-│   192.168.56.11     │   envia range1, range2    │   192.168.56.10         │
-│                     │ <──────────────────────── │                         │
-│   client.py         │   recebe resultado        │   server.py             │
-└─────────────────────┘                           │   ├── Processo 1 (PID X)│
-                                                  │   └── Processo 2 (PID Y)│
-                                                  └─────────────────────────┘
+┌─────────────────────┐        socket TCP         ┌──────────────────────────────┐
+│   CLIENT VM         │ ────────────────────────> │   SERVER VM                  │
+│   192.168.56.11     │   envia modo + params     │   192.168.56.10              │
+│                     │ <──────────────────────── │                              │
+│   client.py         │   recebe resultados       │   server.py                  │
+└─────────────────────┘                           │   ├── Thread 1               │
+                                                  │   ├── Thread 2               │
+                                                  │   ├── Thread 3               │
+                                                  │   └── Thread 4               │
+                                                  │   sincronização: Lock/Sem    │
+                                                  └──────────────────────────────┘
 ```
 
 ---
@@ -49,7 +60,7 @@ Cada processo exibe seu **PID** no terminal, evidenciando que são processos dis
 ## Estrutura do projeto
 
 ```
-sd-01-processos/
+sd-02-threads/
 ├── Vagrantfile
 ├── README.md
 ├── .gitignore
@@ -68,8 +79,8 @@ sd-01-processos/
 ### 1. Clone o repositório
 
 ```bash
-git clone https://github.com/seu-user/sd-01-processos
-cd sd-01-processos
+git clone https://github.com/GustavoRodrigues476/sd-02-threads
+cd sd-02-threads
 ```
 
 ### 2. Suba as VMs
@@ -98,33 +109,52 @@ python3 /vagrant/src/server.py
 **Terminal 2 — execute o client:**
 
 ```bash
+# Executa todos os modos em sequência
 vagrant ssh client
 python3 /vagrant/src/client.py
+
+# Ou escolha um modo específico
+python3 /vagrant/src/client.py simples
+python3 /vagrant/src/client.py lock
+python3 /vagrant/src/client.py semaforo1
+python3 /vagrant/src/client.py semaforo2
 ```
 
 ---
 
 ## Saída esperada
 
-**Terminal do server:**
+**Modo simples** — threads se intercalam sem ordem definida:
 ```
-[Servidor] Aguardando conexão do client...
-[Servidor] Client conectado: ('192.168.56.11', 54321)
-[Servidor] Parâmetros recebidos: range1=500, range2=1000
-[Servidor] Iniciando processos em paralelo...
-[Processo 1 - PID: 1234] Iniciando...
-[Processo 2 - PID: 1235] Iniciando...
-[Processo 1 - PID: 1234] Concluído: 500000
-[Processo 2 - PID: 1235] Concluído: 500000
-[Servidor] Resultado final: 1000000
+[Thread 2] (sem sincronização) n=40000 | i=0
+[Thread 1] (sem sincronização) n=10000 | i=0
+[Thread 3] (sem sincronização) n=90000 | i=0
+[Thread 4] (sem sincronização) n=160000 | i=0
 ```
 
-**Terminal do client:**
+**Modo lock** — uma thread por vez na seção crítica:
 ```
-[Client] Conectado ao servidor.
-[Client] Enviando parâmetros: {'range1': 500, 'range2': 1000}
-[Client] Aguardando resultado...
-[Client] Resultado recebido: 1000000
+[Thread 1] Aguardando Lock...
+[Thread 2] Aguardando Lock...
+[Thread 3] Aguardando Lock...
+[Thread 4] Aguardando Lock...
+[Thread 1] Lock ADQUIRIDO
+[Thread 1] (lock) n=10000 | i=0
+[Thread 1] (lock) n=10000 | i=1
+[Thread 1] Lock LIBERADO
+[Thread 2] Lock ADQUIRIDO
+...
+```
+
+**Modo semaforo2** — duas threads simultâneas:
+```
+[Thread 1] Semáforo(2) ADQUIRIDO
+[Thread 2] Semáforo(2) ADQUIRIDO
+[Thread 1] (semaforo2) n=10000 | i=0
+[Thread 2] (semaforo2) n=40000 | i=0
+[Thread 1] Semáforo(2) LIBERADO
+[Thread 3] Semáforo(2) ADQUIRIDO
+...
 ```
 
 ---
