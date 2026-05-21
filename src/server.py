@@ -130,7 +130,7 @@ class Bolsa(object):
 
 
 def main():
-    ns = Pyro5.api.locate_ns()
+    ns = Pyro5.api.locate_ns(host="192.168.56.10")
     ns_host = ns._pyroUri.host
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.connect((ns_host, 80))
