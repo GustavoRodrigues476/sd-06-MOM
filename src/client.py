@@ -1,39 +1,42 @@
 import socket
-import json
 import sys
 
-SERVER_IP = "192.168.56.10"
-PORT = 5001
+HOST = '192.168.56.10'
+PORT = 5000
 
-MODOS = ["simples", "lock", "semaforo1", "semaforo2"]
+OPERACOES = ["soma", "subtracao", "multiplicacao", "divisao", "potencia", "modulo"]
 
-def executar(modo):
-    dados = {"modo": modo, "ri": 3, "c": 1}
+def calcular(x, y, operacao):
+    tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    dest = (HOST, PORT)
+    tcp.connect(dest)
 
-    print(f"\n{'='*55}")
-    print(f" MODO: {modo.upper()}")
-    print(f"{'='*55}")
-    print(f"[Client] Enviando para o servidor: {dados}")
+    msg = f"{x};{y};{operacao}"
+    print(f"[Client] Enviando: {msg}")
+    tcp.send(msg.encode())
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((SERVER_IP, PORT))
-        s.sendall(json.dumps(dados).encode())
-        resposta = json.loads(s.recv(65536).decode())
-
-    print(f"[Client] Resultado recebido ({len(resposta['resultado'])} linhas):")
-    for linha in resposta["resultado"]:
-        print(f"  {linha}")
+    resposta = tcp.recv(1024)
+    resultado = resposta.decode()
+    print(f"[Client] Resultado: {resultado}")
+    tcp.close()
+    return resultado
 
 def main():
-    modo = sys.argv[1] if len(sys.argv) > 1 else None
+    print("=== Calculadora Distribuída ===")
+    print(f"Operações disponíveis: {', '.join(OPERACOES)}\n")
 
-    if modo and modo in MODOS:
-        executar(modo)
-    else:
-        print("Executando todos os modos...\n")
-        for m in MODOS:
-            executar(m)
-            print()
+    operacoes_teste = [
+        (10, 5, "soma"),
+        (10, 5, "subtracao"),
+        (10, 5, "multiplicacao"),
+        (10, 5, "divisao"),
+        (2,  8, "potencia"),
+        (10, 3, "modulo"),
+    ]
+
+    for x, y, op in operacoes_teste:
+        print(f"\n--- {op.upper()} ---")
+        calcular(x, y, op)
 
 if __name__ == "__main__":
     main()

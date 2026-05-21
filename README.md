@@ -1,31 +1,32 @@
-# SD-02 — Threads Distribuídas com Python
+# SD-03 — Sockets Distribuídos com Python
 
-Exemplo de sistema distribuído utilizando **threads** com `threading` do Python, comunicando-se entre duas máquinas virtuais Linux via **sockets TCP**.
+Exemplo de sistema distribuído utilizando **sockets TCP** do Python, comunicando-se entre duas máquinas virtuais Linux com suporte a **múltiplos clients simultâneos**.
 
 ---
 
 ## Descritivo do Programa
 
 **O que é?**
-Um sistema distribuído onde o client envia ao server o modo de sincronização desejado e o server executa 4 threads em paralelo usando esse modo, retornando os resultados ao client.
+Uma calculadora distribuída onde o client envia dois números e uma operação ao server via socket TCP, o server realiza o cálculo e retorna o resultado. O server suporta múltiplos clients simultâneos através de threads.
 
 **Como funciona?**
-O server aguarda conexão na porta 5001. Ao receber os parâmetros do client (modo e configurações), cria 4 threads que executam uma contagem em paralelo. Dependendo do modo escolhido, as threads acessam a seção crítica de formas diferentes — sem controle, com Lock, com Semáforo(1) ou com Semáforo(2). Os resultados são coletados e enviados de volta ao client.
+O server aguarda conexões na porta 5000. A cada nova conexão, cria uma thread dedicada para atender aquele client, permitindo que vários clients se conectem ao mesmo tempo sem bloqueio. O client envia os dados no formato `X;Y;operacao`, o server interpreta o protocolo, executa a operação e devolve o resultado.
 
 **Por que isso é distribuído?**
-O processamento e a sincronização das threads acontecem no server (VM 1), enquanto o client (VM 2) controla remotamente qual modo de sincronização será usado e recebe os resultados, caracterizando a divisão de responsabilidades entre máquinas distintas em uma rede.
+O processamento do cálculo acontece no server (VM 1), enquanto o client (VM 2) apenas envia os operandos e a operação desejada, recebendo somente o resultado. Cada client é identificado pelo seu IP e porta no log do server, evidenciando a comunicação entre máquinas distintas na rede.
 
-**Os 4 modos demonstrados**
-- `simples` — threads sem sincronização, saída intercalada e imprevisível
-- `lock` — `threading.Lock()` garante que apenas 1 thread por vez acessa a seção crítica
-- `semaforo1` — `threading.Semaphore(1)` equivalente ao Lock, 1 thread por vez
-- `semaforo2` — `threading.Semaphore(2)` permite 2 threads simultâneas na seção crítica
+**Operações disponíveis**
+- `soma` — adição entre dois números
+- `subtracao` — subtração entre dois números
+- `multiplicacao` — multiplicação entre dois números
+- `divisao` — divisão entre dois números (com tratamento de divisão por zero)
+- `potencia` — x elevado a y
+- `modulo` — resto da divisão de x por y
 
 **Tecnologias utilizadas**
-- `threading.Thread` — criação de threads paralelas
-- `threading.Lock` — exclusão mútua entre threads
-- `threading.Semaphore` — controle de acesso com limite configurável
-- `socket TCP` — comunicação entre as duas máquinas virtuais
+- `socket.AF_INET, socket.SOCK_STREAM` — socket TCP
+- `threading.Thread` — múltiplos clients simultâneos
+- Protocolo de comunicação com `;` separando os valores
 - `Vagrant + VirtualBox` — provisionamento das VMs Linux
 
 ---
@@ -35,14 +36,12 @@ O processamento e a sincronização das threads acontecem no server (VM 1), enqu
 ```
 ┌─────────────────────┐        socket TCP         ┌──────────────────────────────┐
 │   CLIENT VM         │ ────────────────────────> │   SERVER VM                  │
-│   192.168.56.11     │   envia modo + params     │   192.168.56.10              │
+│   192.168.56.11     │   envia: X;Y;operacao     │   192.168.56.10              │
 │                     │ <──────────────────────── │                              │
-│   client.py         │   recebe resultados       │   server.py                  │
-└─────────────────────┘                           │   ├── Thread 1               │
-                                                  │   ├── Thread 2               │
-                                                  │   ├── Thread 3               │
-                                                  │   └── Thread 4               │
-                                                  │   sincronização: Lock/Sem    │
+│   client.py         │   recebe: resultado       │   server.py                  │
+└─────────────────────┘                           │   ├── Thread client 1        │
+                                                  │   ├── Thread client 2        │
+                                                  │   └── Thread client N        │
                                                   └──────────────────────────────┘
 ```
 
@@ -60,7 +59,7 @@ O processamento e a sincronização das threads acontecem no server (VM 1), enqu
 ## Estrutura do projeto
 
 ```
-sd-02-threads/
+sd-03-sockets/
 ├── Vagrantfile
 ├── README.md
 ├── .gitignore
@@ -79,8 +78,8 @@ sd-02-threads/
 ### 1. Clone o repositório
 
 ```bash
-git clone https://github.com/GustavoRodrigues476/sd-02-threads
-cd sd-02-threads
+git clone https://github.com/GustavoRodrigues476/sd-03-sockets
+cd sd-03-sockets
 ```
 
 ### 2. Suba as VMs
@@ -109,52 +108,57 @@ python3 /vagrant/src/server.py
 **Terminal 2 — execute o client:**
 
 ```bash
-# Executa todos os modos em sequência
 vagrant ssh client
 python3 /vagrant/src/client.py
-
-# Ou escolha um modo específico
-python3 /vagrant/src/client.py simples
-python3 /vagrant/src/client.py lock
-python3 /vagrant/src/client.py semaforo1
-python3 /vagrant/src/client.py semaforo2
 ```
 
 ---
 
 ## Saída esperada
 
-**Modo simples** — threads se intercalam sem ordem definida:
+**Terminal do server:**
 ```
-[Thread 2] (sem sincronização) n=40000 | i=0
-[Thread 1] (sem sincronização) n=10000 | i=0
-[Thread 3] (sem sincronização) n=90000 | i=0
-[Thread 4] (sem sincronização) n=160000 | i=0
-```
-
-**Modo lock** — uma thread por vez na seção crítica:
-```
-[Thread 1] Aguardando Lock...
-[Thread 2] Aguardando Lock...
-[Thread 3] Aguardando Lock...
-[Thread 4] Aguardando Lock...
-[Thread 1] Lock ADQUIRIDO
-[Thread 1] (lock) n=10000 | i=0
-[Thread 1] (lock) n=10000 | i=1
-[Thread 1] Lock LIBERADO
-[Thread 2] Lock ADQUIRIDO
+[Servidor] Aguardando conexões na porta 5000...
+[Servidor] Operações disponíveis: soma, subtracao, multiplicacao, divisao, potencia, modulo
+[Servidor] Client conectado: ('192.168.56.11', 54320)
+[Servidor] Threads ativas: 1
+[Servidor] 10.0 soma 5.0 = 15.0 | client: ('192.168.56.11', 54320)
+[Servidor] Conexão encerrada: ('192.168.56.11', 54320)
+[Servidor] Client conectado: ('192.168.56.11', 54321)
+[Servidor] Threads ativas: 1
+[Servidor] 10.0 subtracao 5.0 = 5.0 | client: ('192.168.56.11', 54321)
+[Servidor] Conexão encerrada: ('192.168.56.11', 54321)
 ...
 ```
 
-**Modo semaforo2** — duas threads simultâneas:
+**Terminal do client:**
 ```
-[Thread 1] Semáforo(2) ADQUIRIDO
-[Thread 2] Semáforo(2) ADQUIRIDO
-[Thread 1] (semaforo2) n=10000 | i=0
-[Thread 2] (semaforo2) n=40000 | i=0
-[Thread 1] Semáforo(2) LIBERADO
-[Thread 3] Semáforo(2) ADQUIRIDO
-...
+=== Calculadora Distribuída ===
+Operações disponíveis: soma, subtracao, multiplicacao, divisao, potencia, modulo
+
+--- SOMA ---
+[Client] Enviando: 10;5;soma
+[Client] Resultado: 15.0
+
+--- SUBTRACAO ---
+[Client] Enviando: 10;5;subtracao
+[Client] Resultado: 5.0
+
+--- MULTIPLICACAO ---
+[Client] Enviando: 10;5;multiplicacao
+[Client] Resultado: 50.0
+
+--- DIVISAO ---
+[Client] Enviando: 10;5;divisao
+[Client] Resultado: 2.0
+
+--- POTENCIA ---
+[Client] Enviando: 2;8;potencia
+[Client] Resultado: 256.0
+
+--- MODULO ---
+[Client] Enviando: 10;3;modulo
+[Client] Resultado: 1.0
 ```
 
 ---

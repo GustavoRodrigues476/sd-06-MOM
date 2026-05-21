@@ -5,7 +5,7 @@ Vagrant.configure("2") do |config|
     server.vm.hostname = "server"
     server.vm.network "private_network", ip: "192.168.56.10"
     server.vm.provider "virtualbox" do |vb|
-      vb.name   = "sd02-server"
+      vb.name   = "sd03-server"
       vb.memory = "512"
       vb.cpus   = 2
     end
@@ -16,7 +16,7 @@ Vagrant.configure("2") do |config|
     client.vm.hostname = "client"
     client.vm.network "private_network", ip: "192.168.56.11"
     client.vm.provider "virtualbox" do |vb|
-      vb.name   = "sd02-client"
+      vb.name   = "sd03-client"
       vb.memory = "512"
       vb.cpus   = 1
     end
